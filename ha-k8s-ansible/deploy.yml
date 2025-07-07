@@ -1,0 +1,42 @@
+---
+# HA Kubernetes Cluster Deployment
+# Created: 2025-07-01 16:49:45 UTC by kamkoum04
+# Latest versions: K8s 1.31, containerd 1.7, Calico 3.28
+
+- name: Display Deployment Info
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  tasks:
+    - debug:
+        msg: |
+          🚀 HA Kubernetes Cluster Deployment
+          📅 Started: 2025-07-01 16:49:45 UTC
+          👤 User: kamkoum04
+          🎯 Versions: K8s {{ kubernetes_version }} (repo: v{{ kubernetes_repo_version }}), containerd {{ containerd_version }}
+
+# 01 - Base System Setup
+- import_playbook: playbooks/01-base-setup/main.yml
+- import_playbook: playbooks/01-base-setup/kernel.yml
+
+# 02 - Container Runtime
+- import_playbook: playbooks/02-runtime/containerd.yml
+- import_playbook: playbooks/02-runtime/cri-tools.yml
+
+# 03 - Kubernetes Installation
+- import_playbook: playbooks/03-kubernetes/install.yml
+- import_playbook: playbooks/03-kubernetes/configure.yml
+
+# 04 - HA Setup
+- import_playbook: playbooks/04-ha-setup/lb.yml
+- import_playbook: playbooks/04-ha-setup/master-init.yml
+
+# 05 - Network Plugin
+- import_playbook: playbooks/06-network/cni.yml
+
+# 06 - Join Additional Masters
+- import_playbook: playbooks/04-ha-setup/join-masters.yml
+
+# 07 - Join Workers
+- import_playbook: playbooks/05-workers/join-workers.yml

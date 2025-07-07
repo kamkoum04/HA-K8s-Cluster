@@ -1,0 +1,88 @@
+---
+
+
+- name: Install Kubernetes 1.31
+  hosts: masters,workers
+  become: yes
+  vars_files:
+    - ../../vars.yml
+  tasks:
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Remove any existing GPG key (cleanup)
+      file:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        state: absent
+
+    - name: Add Kubernetes GPG key with multiple fallbacks
+      block:
+        - name: Try primary GPG key source
+          shell: |
+            curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_repo_version }}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+            chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          register: primary_key_result
+          failed_when: false
+
+        - name: Try alternative GPG key source (fallback)
+          shell: |
+            curl -fsSL https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/core:/stable:/v{{ kubernetes_repo_version }}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+            chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          when: primary_key_result.rc != 0
+          register: fallback_key_result
+          failed_when: false
+
+        - name: Try legacy GPG key source (last resort)
+          shell: |
+            curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+            chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          when: primary_key_result.rc != 0 and fallback_key_result.rc != 0
+
+    - name: Verify GPG key was installed
+      stat:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      register: gpg_key_check
+      failed_when: not gpg_key_check.stat.exists
+
+    - name: Add Kubernetes repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_repo_version }}/deb/ /"
+        filename: kubernetes
+        update_cache: no
+
+    - name: Update apt cache manually with error handling
+      apt:
+        update_cache: yes
+      register: apt_update_result
+      retries: 3
+      delay: 5
+      until: apt_update_result is succeeded
+
+    - name: Install Kubernetes packages
+      apt:
+        update_cache: yes
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+
+    - name: Hold Kubernetes packages
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Verify Kubernetes installation
+      command: kubectl version --client=true --output=yaml
+      register: kubectl_version
+      changed_when: false
+
+    - debug:
+        msg: "✅ Kubernetes {{ kubernetes_version }} installed from v{{ kubernetes_repo_version }} repository on {{ inventory_hostname }}"

@@ -1,0 +1,66 @@
+---
+
+- name: Join Worker Nodes
+  hosts: workers
+  become: yes
+  vars_files:
+    - ../../vars.yml
+  tasks:
+    - name: Check if already joined to cluster
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Display worker status
+      debug:
+        msg: "{{ inventory_hostname }} is {{ 'already joined' if kubelet_conf.stat.exists else 'ready to join' }}"
+
+    - name: Generate fresh worker join command
+      shell: kubeadm token create --print-join-command
+      register: worker_join_cmd
+      delegate_to: "{{ groups['masters'][0] }}"
+      when: not kubelet_conf.stat.exists
+
+    - name: Display join command (for debugging)
+      debug:
+        msg: "Worker join command: {{ worker_join_cmd.stdout }}"
+      when: not kubelet_conf.stat.exists
+
+    - name: Join worker to cluster
+      shell: "{{ worker_join_cmd.stdout }}"
+      register: join_result
+      when: not kubelet_conf.stat.exists
+
+    - name: Show join result
+      debug:
+        var: join_result.stdout_lines
+      when: not kubelet_conf.stat.exists and join_result is defined
+
+    - name: Wait for kubelet to start
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+      when: not kubelet_conf.stat.exists
+
+    - name: Get actual node hostname
+      shell: hostname
+      register: node_hostname
+      when: not kubelet_conf.stat.exists
+
+    - name: Wait for node to be ready
+      shell: kubectl get node {{ node_hostname.stdout }} --no-headers | awk '{print $2}'
+      register: node_status
+      until: node_status.stdout == "Ready"
+      retries: 60
+      delay: 10
+      delegate_to: "{{ groups['masters'][0] }}"
+      when: not kubelet_conf.stat.exists
+
+    - name: Display worker join status
+      debug:
+        msg: |
+          ✅ Worker {{ node_hostname.stdout if node_hostname is defined else inventory_hostname }} joined successfully!
+          🔄 Node Status: {{ node_status.stdout if node_status is defined else 'Already joined' }}
+          ⏱️  Join Time: {{ ansible_date_time.time }}
+

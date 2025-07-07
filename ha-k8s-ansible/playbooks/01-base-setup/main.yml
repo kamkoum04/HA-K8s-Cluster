@@ -1,0 +1,35 @@
+---
+
+
+- name: Base System Configuration
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+
+    - name: Install essential packages
+      apt:
+        name:
+          - curl
+          - wget
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - software-properties-common
+          - vim
+        state: present
+
+    - name: Configure hosts file
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[item]['ansible_host'] }} {{ item }}"
+        state: present
+      loop: "{{ groups['all'] }}"
+
+      
+    - debug:
+        msg: "✅ Base setup completed on {{ inventory_hostname }}"

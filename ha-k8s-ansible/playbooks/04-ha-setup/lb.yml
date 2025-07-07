@@ -1,0 +1,53 @@
+---
+- name: Setup NGINX Load Balancer for HA Kubernetes (Simple Version)
+  hosts: lb
+  become: yes
+  vars_files:
+    - ../../vars.yml
+  tasks:
+    - name: Install NGINX with stream module
+      apt:
+        name: 
+          - nginx-full
+        state: present
+        update_cache: yes
+
+    - name: Create NGINX configuration for load balancer
+      copy:
+        content: |
+          user www-data;
+          worker_processes auto;
+          pid /run/nginx.pid;
+          
+          # Load dynamic modules
+          include /etc/nginx/modules-enabled/*.conf;
+
+          events {
+              worker_connections 1024;
+          }
+
+          stream {
+              upstream k8s_api_servers {
+                  server {{ master_ips[0] }}:6443;
+                  server {{ master_ips[1] }}:6443;
+                  server {{ master_ips[2] }}:6443;
+              }
+
+              server {
+                  listen 6443;
+                  proxy_pass k8s_api_servers;
+              }
+          }
+        dest: /etc/nginx/nginx.conf
+        backup: yes
+
+    - name: Start and enable NGINX
+      systemd:
+        name: nginx
+        state: restarted
+        enabled: yes
+
+    - name: Verify NGINX is running
+      systemd:
+        name: nginx
+        state: started

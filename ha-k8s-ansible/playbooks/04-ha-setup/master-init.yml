@@ -1,0 +1,74 @@
+---
+
+
+- name: Initialize First Master
+  hosts: master1
+  become: yes
+  vars_files:
+    - ../../vars.yml
+  tasks:
+    - name: Check if cluster exists
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf
+
+    - name: Initialize Kubernetes cluster
+      shell: |
+        kubeadm init \
+          --control-plane-endpoint "{{ lb_ip }}:6443" \
+          --upload-certs \
+          --pod-network-cidr={{ pod_network_cidr }} \
+          --service-cidr={{ service_subnet }} \
+          --apiserver-advertise-address={{ ansible_host }} \
+          --kubernetes-version={{ kubernetes_version }}
+      register: init_output
+      when: not admin_conf.stat.exists
+
+    - name: Setup kubectl for root
+      shell: |
+        mkdir -p $HOME/.kube
+        cp /etc/kubernetes/admin.conf $HOME/.kube/config
+        chown $(id -u):$(id -g) $HOME/.kube/config
+      when: not admin_conf.stat.exists
+
+    - name: Setup kubectl for ansible user
+      shell: |
+        mkdir -p /home/ansible/.kube
+        cp /etc/kubernetes/admin.conf /home/ansible/.kube/config
+        chown ansible:ansible /home/ansible/.kube/config
+      when: not admin_conf.stat.exists
+
+    - name: Generate join commands
+      shell: kubeadm token create --print-join-command
+      register: worker_join_command
+
+    - name: Get certificate key
+      shell: kubeadm init phase upload-certs --upload-certs | tail -1
+      register: certificate_key
+
+    - name: Create join command facts
+      set_fact:
+        worker_join_cmd: "{{ worker_join_command.stdout }}"
+        master_join_cmd: "{{ worker_join_command.stdout }} --control-plane --certificate-key {{ certificate_key.stdout }}"
+
+    - name: Save join commands
+      copy:
+        content: |
+          # Kubernetes Join Commands
+          # Generated: 2025-07-01 16:49:45 UTC by kamkoum04
+          # Kubernetes Version: {{ kubernetes_version }}
+          
+          # Worker Join Command:
+          {{ worker_join_cmd }}
+          
+          # Master Join Command:
+          {{ master_join_cmd }}
+          
+          # Certificate Key (expires in 2 hours):
+          {{ certificate_key.stdout }}
+        dest: /home/ansible/join-commands.txt
+        owner: ansible
+        group: ansible
+
+    - debug:
+        msg: "✅ Master initialized: {{ inventory_hostname }}"

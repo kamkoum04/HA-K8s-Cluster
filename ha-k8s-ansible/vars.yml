@@ -1,0 +1,25 @@
+---
+# HA Kubernetes Cluster Variables
+# Updated: 2025-07-01 16:49:45 UTC
+# User: kamkoum04
+
+# Latest Software Versions
+kubernetes_version: "1.31.10"
+kubernetes_repo_version: "1.31"
+containerd_version: "1.7.22"
+calico_version: "3.28.2"
+cri_tools_version: "1.31.0"
+
+# Cluster Configuration
+cluster_name: "ha-k8s-cluster"
+lb_ip: "104.248.17.145"
+pod_network_cidr: "192.168.0.0/16"
+service_subnet: "10.96.0.0/12"
+
+# Master IPs
+master_ips:
+  - "64.226.79.39"
+  - "178.128.195.12"
+  - "164.92.226.234"
+cni_plugin: "calico"
+timezone: "UTC"

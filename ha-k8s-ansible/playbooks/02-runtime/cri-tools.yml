@@ -1,0 +1,38 @@
+---
+# Install Latest CRI Tools
+# Updated: 2025-07-01 16:49:45 UTC by kamkoum04
+# Version: 1.31.0
+
+- name: Install CRI Tools
+  hosts: masters,workers
+  become: yes
+  vars_files:
+    - ../../vars.yml
+  tasks:
+    - name: Download crictl
+      get_url:
+        url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ cri_tools_version }}/crictl-v{{ cri_tools_version }}-linux-amd64.tar.gz"
+        dest: /tmp/crictl.tar.gz
+
+    - name: Extract crictl
+      unarchive:
+        src: /tmp/crictl.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure crictl
+      copy:
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+        dest: /etc/crictl.yaml
+
+    - name: Verify crictl installation
+      command: crictl --version
+      register: crictl_version
+
+    - debug:
+        msg: "✅ CRI Tools installed: {{ crictl_version.stdout }}"

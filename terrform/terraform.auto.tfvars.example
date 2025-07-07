@@ -1,0 +1,10 @@
+# DigitalOcean Configuration Template
+# Copy this file to terraform.auto.tfvars and add your real values
+# terraform.auto.tfvars is ignored by git for security
+
+do_token     = "your_digitalocean_token_here"
+ssh_key_name = "your_ssh_key_name_here"
+
+# Optional: Customize droplet settings
+# region = "nyc1"
+# size = "s-2vcpu-2gb"

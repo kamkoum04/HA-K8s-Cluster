@@ -1,0 +1,181 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etcd-backup-script
+  namespace: kube-system
+data:
+  backup-etcd.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Configuration
+    BACKUP_DIR="/var/lib/etcd-backup"
+    RETENTION_DAYS=7
+    DATE=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="${BACKUP_DIR}/etcd-backup-${DATE}.db"
+    
+    # Create backup directory
+    mkdir -p ${BACKUP_DIR}
+    
+    # Etcd configuration
+    ETCD_ENDPOINTS="https://127.0.0.1:2379"
+    ETCD_CACERT="/etc/kubernetes/pki/etcd/ca.crt"
+    ETCD_CERT="/etc/kubernetes/pki/etcd/server.crt"
+    ETCD_KEY="/etc/kubernetes/pki/etcd/server.key"
+    
+    echo "$(date): Starting etcd backup to ${BACKUP_FILE}"
+    
+    # Create backup
+    ETCDCTL_API=3 etcdctl snapshot save ${BACKUP_FILE} \
+      --endpoints=${ETCD_ENDPOINTS} \
+      --cacert=${ETCD_CACERT} \
+      --cert=${ETCD_CERT} \
+      --key=${ETCD_KEY}
+    
+    # Verify backup
+    ETCDCTL_API=3 etcdctl snapshot status ${BACKUP_FILE} \
+      --endpoints=${ETCD_ENDPOINTS} \
+      --cacert=${ETCD_CACERT} \
+      --cert=${ETCD_CERT} \
+      --key=${ETCD_KEY}
+    
+    echo "$(date): Backup completed successfully"
+    
+    # Cleanup old backups (keep only last 7 days)
+    find ${BACKUP_DIR} -name "etcd-backup-*.db" -type f -mtime +${RETENTION_DAYS} -delete
+    
+    echo "$(date): Cleanup completed"
+    
+    # List current backups
+    echo "$(date): Current backups:"
+    ls -la ${BACKUP_DIR}/
+  
+  cleanup-old-backups.sh: |
+    #!/bin/bash
+    set -e
+    
+    BACKUP_DIR="/var/lib/etcd-backup"
+    
+    echo "$(date): Starting cleanup of old backups"
+    
+    # Delete backups older than 7 days
+    find ${BACKUP_DIR} -name "etcd-backup-*.db" -type f -mtime +7 -delete
+    
+    echo "$(date): Cleanup completed"
+    
+    # List remaining backups
+    echo "$(date): Remaining backups:"
+    ls -la ${BACKUP_DIR}/ || echo "No backups found"
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etcd-backup
+  namespace: kube-system
+spec:
+  # Schedule: Every Monday, Wednesday, Saturday at 3:00 AM
+  schedule: "0 3 * * 1,3,6"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostNetwork: true
+          nodeSelector:
+            node-role.kubernetes.io/control-plane: ""
+          tolerations:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+            effect: NoSchedule
+          - key: node-role.kubernetes.io/master
+            operator: Exists
+            effect: NoSchedule
+          containers:
+          - name: etcd-backup
+            image: quay.io/coreos/etcd:v3.5.9
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Install required tools
+              apk add --no-cache findutils
+              
+              # Execute backup script
+              /scripts/backup-etcd.sh
+            volumeMounts:
+            - name: etcd-certs
+              mountPath: /etc/kubernetes/pki/etcd
+              readOnly: true
+            - name: backup-storage
+              mountPath: /var/lib/etcd-backup
+            - name: backup-scripts
+              mountPath: /scripts
+            env:
+            - name: ETCDCTL_API
+              value: "3"
+          volumes:
+          - name: etcd-certs
+            hostPath:
+              path: /etc/kubernetes/pki/etcd
+              type: Directory
+          - name: backup-storage
+            hostPath:
+              path: /var/lib/etcd-backup
+              type: DirectoryOrCreate
+          - name: backup-scripts
+            configMap:
+              name: etcd-backup-script
+              defaultMode: 0755
+          restartPolicy: OnFailure
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etcd-backup-cleanup
+  namespace: kube-system
+spec:
+  # Schedule: Every Monday at 4:00 AM (1 hour after backup)
+  schedule: "0 4 * * 1"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostNetwork: true
+          nodeSelector:
+            node-role.kubernetes.io/control-plane: ""
+          tolerations:
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+            effect: NoSchedule
+          - key: node-role.kubernetes.io/master
+            operator: Exists
+            effect: NoSchedule
+          containers:
+          - name: etcd-backup-cleanup
+            image: alpine:3.18
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Install required tools
+              apk add --no-cache findutils
+              
+              # Execute cleanup script
+              /scripts/cleanup-old-backups.sh
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /var/lib/etcd-backup
+            - name: backup-scripts
+              mountPath: /scripts
+          volumes:
+          - name: backup-storage
+            hostPath:
+              path: /var/lib/etcd-backup
+              type: DirectoryOrCreate
+          - name: backup-scripts
+            configMap:
+              name: etcd-backup-script
+              defaultMode: 0755
+          restartPolicy: OnFailure

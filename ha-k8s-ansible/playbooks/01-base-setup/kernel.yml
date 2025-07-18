@@ -41,6 +41,3 @@
 
     - name: Apply sysctl settings
       command: sysctl --system
-
-    - debug:
-        msg: "✅ Kernel configured for Kubernetes on {{ inventory_hostname }}"

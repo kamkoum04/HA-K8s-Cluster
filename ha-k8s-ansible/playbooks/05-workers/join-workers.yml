@@ -13,17 +13,18 @@
 
     - name: Display worker status
       debug:
-        msg: "{{ inventory_hostname }} is {{ 'already joined' if kubelet_conf.stat.exists else 'ready to join' }}"
+        msg: "🔍 Worker {{ inventory_hostname }} join status: {{ 'Already joined' if kubelet_conf.stat.exists else 'Needs to join' }}"
 
     - name: Generate fresh worker join command
       shell: kubeadm token create --print-join-command
       register: worker_join_cmd
       delegate_to: "{{ groups['masters'][0] }}"
+      run_once: true
       when: not kubelet_conf.stat.exists
 
     - name: Display join command (for debugging)
       debug:
-        msg: "Worker join command: {{ worker_join_cmd.stdout }}"
+        msg: "🔧 Join command ready for {{ inventory_hostname }}"
       when: not kubelet_conf.stat.exists
 
     - name: Join worker to cluster
@@ -33,8 +34,7 @@
 
     - name: Show join result
       debug:
-        var: join_result.stdout_lines
-      when: not kubelet_conf.stat.exists and join_result is defined
+        msg: "📝 Join result: {{ join_result.stdout | default('Skipped - already joined') }}"
 
     - name: Wait for kubelet to start
       systemd:
@@ -43,13 +43,8 @@
         enabled: yes
       when: not kubelet_conf.stat.exists
 
-    - name: Get actual node hostname
-      shell: hostname
-      register: node_hostname
-      when: not kubelet_conf.stat.exists
-
-    - name: Wait for node to be ready
-      shell: kubectl get node {{ node_hostname.stdout }} --no-headers | awk '{print $2}'
+    - name: Wait for node to be ready with correct name
+      shell: kubectl get node {{ inventory_hostname }} --no-headers | awk '{print $2}'
       register: node_status
       until: node_status.stdout == "Ready"
       retries: 60
@@ -57,10 +52,32 @@
       delegate_to: "{{ groups['masters'][0] }}"
       when: not kubelet_conf.stat.exists
 
-    - name: Display worker join status
+    - name: Display join success
       debug:
-        msg: |
-          ✅ Worker {{ node_hostname.stdout if node_hostname is defined else inventory_hostname }} joined successfully!
-          🔄 Node Status: {{ node_status.stdout if node_status is defined else 'Already joined' }}
-          ⏱️  Join Time: {{ ansible_date_time.time }}
+        msg: "✅ Worker {{ inventory_hostname }} successfully joined and ready"
+      when: not kubelet_conf.stat.exists
 
+- name: Verify Workers Status
+  hosts: "{{ groups['masters'][0] }}"
+  become_user: ansible
+  tasks:
+    - name: Get all worker nodes
+      shell: kubectl get nodes -l '!node-role.kubernetes.io/control-plane' --no-headers | wc -l
+      register: worker_count
+
+    - name: Display worker status
+      debug:
+        msg: "🎯 Worker Status: {{ worker_count.stdout }}/2 workers ready"
+
+    - name: Display all nodes
+      shell: kubectl get nodes -o wide
+      register: all_nodes
+
+    - name: Show cluster overview
+      debug:
+        msg: "📋 Cluster Overview:"
+        verbosity: 0
+
+    - name: Show nodes
+      debug:
+        var: all_nodes.stdout_lines

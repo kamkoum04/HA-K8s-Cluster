@@ -29,10 +29,3 @@
           runtime-endpoint: unix:///run/containerd/containerd.sock
           image-endpoint: unix:///run/containerd/containerd.sock
         dest: /etc/crictl.yaml
-
-    - name: Verify crictl installation
-      command: crictl --version
-      register: crictl_version
-
-    - debug:
-        msg: "✅ CRI Tools installed: {{ crictl_version.stdout }}"

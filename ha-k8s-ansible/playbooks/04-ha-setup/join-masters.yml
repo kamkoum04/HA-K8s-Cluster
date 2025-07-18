@@ -1,6 +1,5 @@
 ---
 
-
 - name: Join Additional Masters
   hosts: master2,master3
   become: yes
@@ -13,63 +12,34 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: Display join status
-      debug:
-        msg: "{{ inventory_hostname }} is {{ 'already joined' if kubelet_conf.stat.exists else 'ready to join' }}"
-
     - name: Generate fresh certificate key (expires in 2 hours)
       shell: kubeadm init phase upload-certs --upload-certs | tail -1
       register: cert_key
       delegate_to: "{{ groups['masters'][0] }}"
+      run_once: true
       when: not kubelet_conf.stat.exists
 
     - name: Generate fresh join command
       shell: kubeadm token create --print-join-command
-      register: base_join_cmd
+      register: join_command
       delegate_to: "{{ groups['masters'][0] }}"
+      run_once: true
       when: not kubelet_conf.stat.exists
 
-    - name: Display join command (for debugging)
-      debug:
-        msg: "Join command: {{ base_join_cmd.stdout }} --control-plane --certificate-key {{ cert_key.stdout }}"
+    - name: Create master join command
+      set_fact:
+        master_join_cmd: "{{ join_command.stdout }} --control-plane --certificate-key {{ cert_key.stdout }}"
       when: not kubelet_conf.stat.exists
 
     - name: Join master to cluster
-      shell: "{{ base_join_cmd.stdout }} --control-plane --certificate-key {{ cert_key.stdout }}"
-      register: join_result
-      when: not kubelet_conf.stat.exists
-
-    - name: Show join result
-      debug:
-        var: join_result.stdout_lines
-      when: not kubelet_conf.stat.exists and join_result is defined
-
-    - name: Wait for kubelet to start
-      systemd:
-        name: kubelet
-        state: started
-        enabled: yes
-      when: not kubelet_conf.stat.exists
-
-    - name: Get actual node hostname
-      shell: hostname
-      register: node_hostname
-      when: not kubelet_conf.stat.exists
-
-    - name: Wait for node to be ready
-      shell: kubectl get node {{ node_hostname.stdout }} --no-headers | awk '{print $2}'
-      register: node_status
-      until: node_status.stdout == "Ready"
-      retries: 30
-      delay: 10
-      delegate_to: "{{ groups['masters'][0] }}"
+      shell: "{{ master_join_cmd }}"
       when: not kubelet_conf.stat.exists
 
     - name: Setup kubectl for root
       shell: |
-        mkdir -p $HOME/.kube
-        cp /etc/kubernetes/admin.conf $HOME/.kube/config
-        chown $(id -u):$(id -g) $HOME/.kube/config
+        mkdir -p /root/.kube
+        cp /etc/kubernetes/admin.conf /root/.kube/config
+        chown root:root /root/.kube/config
       when: not kubelet_conf.stat.exists
 
     - name: Setup kubectl for ansible user
@@ -78,36 +48,3 @@
         cp /etc/kubernetes/admin.conf /home/ansible/.kube/config
         chown ansible:ansible /home/ansible/.kube/config
       when: not kubelet_conf.stat.exists
-
-    - name: Test kubectl access
-      shell: kubectl get nodes
-      become_user: ansible
-      register: kubectl_test
-      when: not kubelet_conf.stat.exists
-
-    - name: Display final status
-      debug:
-        msg: |
-          ✅ Master {{ node_hostname.stdout if node_hostname is defined else inventory_hostname }} joined successfully!
-          🔄 Node Status: {{ node_status.stdout if node_status is defined else 'Already joined' }}
-          🎯 kubectl access: {{ 'Working' if kubectl_test is defined and kubectl_test.rc == 0 else 'Configured' }}
-
-- name: Verify HA Cluster Status
-  hosts: "{{ groups['masters'][0] }}"
-  become_user: ansible
-  tasks:
-    - name: Get all master nodes
-      shell: kubectl get nodes -l node-role.kubernetes.io/control-plane --no-headers
-      register: master_nodes
-
-    - name: Get control plane pods
-      shell: kubectl get pods -n kube-system -l tier=control-plane -o wide
-      register: control_plane_pods
-
-    - name: Display HA cluster status
-      debug:
-        msg: |
-          🎉 HA Cluster Status:
-          📊 Masters: {{ master_nodes.stdout_lines | length }}/3
-          🔧 Control Plane Pods: {{ control_plane_pods.stdout_lines | length }}
-          ✅ High Availability: {{ 'ACTIVE' if master_nodes.stdout_lines | length >= 3 else 'PENDING' }}

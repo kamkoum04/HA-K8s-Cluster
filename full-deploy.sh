@@ -27,6 +27,8 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "🎉 Complete HA Kubernetes cluster deployment finished!"
     echo "🔗 Your cluster is ready to use!"
+    echo "   ansible master1 -i inventory.ini -m fetch -a \"src=/home/ansible/.kube/config dest=./kubeconfig flat=yes\" --become-user=ansible"
+
 else
     echo "❌ Kubernetes deployment failed."
     exit 1

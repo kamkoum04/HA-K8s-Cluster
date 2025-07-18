@@ -1,0 +1,67 @@
+---
+- name: Deploy Kubernetes Addons (Helm, Metrics Server & Ingress Controller)
+  hosts: master1
+  become: yes
+  become_user: ansible
+  tasks:
+    - name: Install Helm
+      shell: |
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        ./get_helm.sh
+        rm get_helm.sh
+      register: helm_result
+      
+    - name: Display Helm installation result
+      debug:
+        msg: "{{ helm_result.stdout }}"
+        
+    - name: Verify Helm installation
+      shell: helm version --short
+      register: helm_version
+      
+    - name: Display Helm version
+      debug:
+        msg: "{{ helm_version.stdout }}"
+        
+    - name: Install Metrics Server
+      shell: |
+        kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      register: metrics_result
+      
+    - name: Display Metrics Server installation result
+      debug:
+        msg: "{{ metrics_result.stdout }}"
+        
+    - name: Install NGINX Ingress Controller
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+      register: ingress_result
+      
+    - name: Display Ingress Controller installation result
+      debug:
+        msg: "{{ ingress_result.stdout }}"
+        
+    - name: Wait for Metrics Server to be ready
+      shell: kubectl get pods -n kube-system -l k8s-app=metrics-server --field-selector=status.phase=Running
+      register: metrics_pods
+      until: metrics_pods.stdout_lines | length > 0
+      retries: 30
+      delay: 10
+      
+    - name: Wait for Ingress Controller to be ready
+      shell: kubectl get pods -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx --field-selector=status.phase=Running
+      register: ingress_pods
+      until: ingress_pods.stdout_lines | length > 0
+      retries: 30
+      delay: 10
+      
+    - name: Display addon status
+      debug:
+        msg: 
+          - "✅ Helm installed successfully"
+          - "✅ Metrics Server installed successfully"
+          - "✅ NGINX Ingress Controller installed successfully"
+          - "🔍 Check Helm: helm version"
+          - "🔍 Check status with: kubectl get pods -n kube-system -l k8s-app=metrics-server"
+          - "🔍 Check status with: kubectl get pods -n ingress-nginx"

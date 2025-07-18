@@ -32,11 +32,15 @@
 - import_playbook: playbooks/04-ha-setup/lb.yml
 - import_playbook: playbooks/04-ha-setup/master-init.yml
 
-# 05 - Network Plugin
+# 05 - Network Plugin 
 - import_playbook: playbooks/06-network/cni.yml
 
-# 06 - Join Additional Masters
+# 06 - Join Additional Masters (AFTER CNI)
 - import_playbook: playbooks/04-ha-setup/join-masters.yml
 
 # 07 - Join Workers
 - import_playbook: playbooks/05-workers/join-workers.yml
+
+# 08 - metrics-server//helm//ingress-nginx
+- import_playbook: playbooks/07-addons/addons.yml
+

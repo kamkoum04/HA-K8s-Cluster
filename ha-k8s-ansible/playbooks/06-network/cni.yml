@@ -7,59 +7,9 @@
   vars_files:
     - ../../vars.yml
   tasks:
-    - name: Check if Calico is already installed
-      shell: kubectl get pods -n kube-system -l k8s-app=calico-node --no-headers | wc -l
-      register: calico_check
-      failed_when: false
-
-    - name: Download Calico manifest
-      get_url:
-        url: "https://raw.githubusercontent.com/projectcalico/calico/v{{ calico_version }}/manifests/calico.yaml"
-        dest: /home/ansible/calico-original.yaml
-        mode: '0644'
-      when: calico_check.stdout == "0"
-
-    - name: Check if CIDR modification is needed
-      shell: grep -q "192.168.0.0/16" /home/ansible/calico-original.yaml
-      register: cidr_check
-      failed_when: false
-      when: calico_check.stdout == "0"
-
-    - name: Copy Calico manifest (no modification needed)
-      copy:
-        src: /home/ansible/calico-original.yaml
-        dest: /home/ansible/calico.yaml
-        remote_src: yes
-      when: calico_check.stdout == "0" and cidr_check.rc == 0
-
-    - name: Modify Calico CIDR if needed
-      shell: |
-        sed 's|# - name: CALICO_IPV4POOL_CIDR|            - name: CALICO_IPV4POOL_CIDR|g' /home/ansible/calico-original.yaml | \
-        sed 's|#   value: "192.168.0.0/16"|              value: "{{ pod_network_cidr }}"|g' > /home/ansible/calico.yaml
-      when: calico_check.stdout == "0" and cidr_check.rc != 0
-
-    - name: Validate Calico YAML syntax
-      shell: kubectl apply --dry-run=client -f /home/ansible/calico.yaml
-      register: yaml_validation
-      when: calico_check.stdout == "0"
-
-    - name: Show validation result
-      debug:
-        msg: "✅ Calico YAML validation successful"
-      when: calico_check.stdout == "0" and yaml_validation.rc == 0
-
-    - name: Apply Calico CNI
-      shell: kubectl apply -f /home/ansible/calico.yaml
+    - name: Install Calico CNI
+      shell: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v{{ calico_version }}/manifests/calico.yaml
       register: calico_apply
-      when: calico_check.stdout == "0"
-
-    - name: Wait for Calico controller to be ready
-      shell: kubectl get deployment calico-kube-controllers -n kube-system -o jsonpath='{.status.readyReplicas}'
-      register: controller_ready
-      until: controller_ready.stdout == "1"
-      retries: 30
-      delay: 10
-      when: calico_check.stdout == "0"
 
     - name: Wait for Calico nodes to be ready
       shell: kubectl get daemonset calico-node -n kube-system -o jsonpath='{.status.numberReady}'
@@ -67,7 +17,6 @@
       until: nodes_ready.stdout | int >= 1
       retries: 30
       delay: 10
-      when: calico_check.stdout == "0"
 
     - name: Verify CNI installation
       shell: kubectl get pods -n kube-system -l k8s-app=calico-node -o wide

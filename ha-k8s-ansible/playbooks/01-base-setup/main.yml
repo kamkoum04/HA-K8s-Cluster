@@ -1,6 +1,4 @@
 ---
-
-
 - name: Base System Configuration
   hosts: all
   become: yes
@@ -20,16 +18,31 @@
           - ca-certificates
           - gnupg
           - software-properties-common
-          - vim
         state: present
 
-    - name: Configure hosts file
+    - name: Set hostname to match inventory
+      hostname:
+        name: "{{ inventory_hostname }}"
+        use: systemd
+      when: ansible_hostname != inventory_hostname
+
+    - name: Update /etc/hosts with local hostname
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        regexp: "^127.0.1.1"
+        state: present
+
+    - name: Configure hosts file for all cluster nodes
       lineinfile:
         path: /etc/hosts
         line: "{{ hostvars[item]['ansible_host'] }} {{ item }}"
         state: present
       loop: "{{ groups['all'] }}"
 
-      
-    - debug:
-        msg: "✅ Base setup completed on {{ inventory_hostname }}"
+    - name: Ensure hostname persists after reboot
+      lineinfile:
+        path: /etc/hostname
+        line: "{{ inventory_hostname }}"
+        create: yes
+        state: present

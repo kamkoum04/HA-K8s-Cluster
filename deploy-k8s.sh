@@ -37,8 +37,10 @@ fi
 echo "✅ All nodes are reachable"
 echo "🎯 Starting Ansible playbook deployment..."
 
-# Run the main deployment playbook
-ansible-playbook -i inventory.ini deploy.yml
+# Run the main deployment playbook with better error handling
+ansible-playbook -i inventory.ini deploy.yml \
+    --timeout=300 \
+    --ssh-extra-args="-o ConnectTimeout=30 -o ConnectionAttempts=3 -o ServerAliveInterval=60"
 
 if [ $? -eq 0 ]; then
     echo ""

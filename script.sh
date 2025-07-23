@@ -4,8 +4,8 @@
 # Simple script to provision infrastructure and update Ansible configs
 
 # Paths
-TERRAFORM_DIR=~/Project/playsoftintern/terrform
-ANSIBLE_DIR=~/Project/playsoftintern/ha-k8s-ansible
+TERRAFORM_DIR=~/Project/playsoftintern/terraform
+ANSIBLE_DIR=~/Project/playsoftintern/ansible
 
 echo "� Starting Terraform deployment..."
 

@@ -21,7 +21,7 @@ module "masters" {
   image         = "ubuntu-24-10-x64"
   ssh_keys      = [digitalocean_ssh_key.default.id]
   tags          = ["k8s", "master"]
-  droplet_count = var.master_count # ✅
+  droplet_count = var.master_count 
   providers = {
     digitalocean = digitalocean
   }
@@ -35,7 +35,7 @@ module "workers" {
   image         = "ubuntu-24-10-x64"
   ssh_keys      = [digitalocean_ssh_key.default.id]
   tags          = ["k8s", "worker"]
-  droplet_count = var.worker_count # ✅
+  droplet_count = var.worker_count 
   providers = {
     digitalocean = digitalocean
   }

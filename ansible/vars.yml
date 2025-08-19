@@ -12,14 +12,14 @@ cri_tools_version: "1.31.0"
 
 # Cluster Configuration
 cluster_name: "ha-k8s-cluster"
-lb_ip: "157.230.19.244"
+lb_ip: "138.68.90.201"
 pod_network_cidr: "192.168.0.0/16"
 service_subnet: "10.96.0.0/12"
 
 # Master IPs
 master_ips:
-  - "104.248.129.103"
-  - "167.172.170.85"
-  - "209.38.196.187"
+  - "138.68.93.178"
+  - "134.122.83.214"
+  - "134.122.87.126"
 cni_plugin: "calico"
 timezone: "UTC"

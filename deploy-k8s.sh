@@ -3,7 +3,7 @@
 # Deploy Kubernetes HA cluster using Ansible
 # Run this after script.sh completes
 
-ANSIBLE_DIR=~/Project/playsoftintern/ha-k8s-ansible
+ANSIBLE_DIR=~/Project/playsoftintern/ansible
 
 echo "🚀 Starting Kubernetes HA Cluster Deployment..."
 echo "📁 Working directory: $ANSIBLE_DIR"
